@@ -240,7 +240,13 @@ const createPaymentHandler = async (req, res) => {
       }
     }
 
-    // 3. Determine Return Link & Payment Server URL
+    // 3. Fetch Dynamic Merchant UPI ID from Admin Settings
+    const settings = await AppSettings.findOne();
+    const dynamicUpiId = (settings?.upiId && settings.upiId.trim().length > 0)
+      ? settings.upiId.trim()
+      : 'shivasurya982@okicici';
+
+    // 4. Determine Return Link & Payment Server URL
     const paymentServerUrl = process.env.PAYMENT_SERVER_URL;
     const appKey = process.env.APP_KEY;
     const returnUrl = clientReturnUrl || process.env.RETURN_URL_APP || 'fancyworld://payment-done';
@@ -262,6 +268,9 @@ const createPaymentHandler = async (req, res) => {
             amount: initialTotal,
             ref: order._id.toString(),
             returnUrl,
+            upiId: dynamicUpiId,
+            vpa: dynamicUpiId,
+            payee: 'Siva Murugan Fancy',
           }),
         });
 
@@ -286,9 +295,7 @@ const createPaymentHandler = async (req, res) => {
 
     // Fallback direct UPI Intent URL if payment server URL not configured
     if (!payUrl) {
-      const settings = await AppSettings.findOne();
-      const vpa = settings?.upiId || 'shivasurya982-1@oksbi';
-      payUrl = `upi://pay?pa=${vpa}&pn=${encodeURIComponent('FANCY WORLD')}&tr=${upiRef}&am=${finalAmount.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Order ' + order.orderNumber)}`;
+      payUrl = `upi://pay?pa=${dynamicUpiId}&pn=${encodeURIComponent('FANCY WORLD')}&tr=${upiRef}&am=${finalAmount.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Order ' + order.orderNumber)}`;
     }
 
     return res.json({
