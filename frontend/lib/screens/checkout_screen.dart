@@ -11,7 +11,6 @@ import '../services/payment_service.dart';
 import '../config/theme.dart';
 import '../widgets/gold_button.dart';
 import '../widgets/glass_toast.dart';
-import '../bottom_navigation.dart';
 import 'order_success_screen.dart';
 import 'payment_result_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -127,22 +126,29 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         returnUrl: 'fancyworld://payment-done',
       );
 
-      final String payUrl = orderData['payUrl'] ?? orderData['upiPayload'];
-      final String orderId = orderData['orderId'] ?? orderData['fancyWorldOrderId'];
-      final String? orderNumber = orderData['orderNumber'];
+      final String payUrl = (orderData['payUrl'] ?? orderData['upiPayload'] ?? '').toString();
+      final String upiUri = (orderData['upiUri'] ?? orderData['upiPayload'] ?? payUrl).toString();
+      final String orderId = (orderData['orderId'] ?? orderData['fancyWorldOrderId']).toString();
+      final String? orderNumber = orderData['orderNumber']?.toString();
       final double amount = (orderData['amount'] as num).toDouble();
 
       // Persist pending order ID for app reload / deep link recovery
       await PaymentService.savePendingOrderId(orderId);
 
-      // Launch payment URL in external browser / app
-      final uri = Uri.parse(payUrl);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      // Launch clean UPI payment intent in external UPI app
+      final targetUri = Uri.parse(upiUri.isNotEmpty ? upiUri : payUrl);
+      if (await canLaunchUrl(targetUri)) {
+        await launchUrl(targetUri, mode: LaunchMode.externalApplication);
       }
 
       if (mounted) {
-        _showPaymentVerificationDialog(payUrl, orderId, orderNumber, amount);
+        _showPaymentVerificationDialog(
+          payUrl: payUrl,
+          upiUri: upiUri,
+          orderId: orderId,
+          orderNumber: orderNumber,
+          amount: amount,
+        );
       }
 
     } catch (e) {
@@ -154,7 +160,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
-  void _showPaymentVerificationDialog(String payUrl, String orderId, String? orderNumber, double amount) {
+  void _showPaymentVerificationDialog({
+    required String payUrl,
+    required String upiUri,
+    required String orderId,
+    String? orderNumber,
+    required double amount,
+  }) {
     Timer? statusTimer;
 
     showDialog(
@@ -209,7 +221,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
                     child: QrImageView(
-                      data: payUrl,
+                      data: upiUri.isNotEmpty ? upiUri : payUrl,
                       version: QrVersions.auto,
                       size: 150,
                       eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
@@ -232,7 +244,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       label: const Text('PAY VIA UPI APP', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 1)),
                       onPressed: () async {
                         try {
-                          final uri = Uri.parse(payUrl);
+                          final uri = Uri.parse(upiUri.isNotEmpty ? upiUri : payUrl);
                           await launchUrl(uri, mode: LaunchMode.externalApplication);
                         } catch (e) {
                           if (ctx.mounted) {

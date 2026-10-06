@@ -99,7 +99,7 @@ class _BottomNavigationState extends State<BottomNavigation> {
   }
 
   Future<void> _handlePaymentDeepLink(Uri uri) async {
-    if (uri.scheme == 'fancyworld' || uri.toString().contains('payment-done')) {
+    if (uri.scheme == 'fancyworld' || uri.scheme == 'smfancy' || uri.toString().contains('payment-done')) {
       final orderId = uri.queryParameters['order'] ?? uri.queryParameters['ref'] ?? await PaymentService.getPendingOrderId();
       if (orderId != null && orderId.isNotEmpty) {
         final res = await PaymentService.checkPaymentStatus(orderId);

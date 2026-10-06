@@ -62,6 +62,41 @@ function verifyHMACSignature(req) {
 }
 
 /**
+ * Helper to build NPCI compliant UPI URI
+ */
+function buildValidUpiUri({ upiId, payee, amount, ref, orderNumber, rawUri }) {
+  let cleanUpiId = (upiId || '').replace(/%40/g, '@').trim();
+  let cleanPayee = payee || 'SM Fancy';
+  let formattedAmount = parseFloat(amount).toFixed(2);
+
+  if (rawUri && rawUri.startsWith('upi://')) {
+    const queryStr = rawUri.includes('?') ? rawUri.split('?')[1] : '';
+    const params = new URLSearchParams(queryStr);
+
+    let pa = (params.get('pa') || cleanUpiId).replace(/%40/g, '@').trim();
+    let pn = params.get('pn') || cleanPayee;
+    let am = params.get('am') || formattedAmount;
+    let cu = params.get('cu') || 'INR';
+    let tr = params.get('tr') || ref;
+    let tn = params.get('tn') || ('Order ' + (orderNumber || ref));
+
+    return 'upi://pay?pa=' + pa +
+      '&pn=' + encodeURIComponent(pn) +
+      '&am=' + parseFloat(am).toFixed(2) +
+      '&cu=' + cu +
+      '&tr=' + encodeURIComponent(tr) +
+      '&tn=' + encodeURIComponent(tn);
+  }
+
+  return 'upi://pay?pa=' + cleanUpiId +
+    '&pn=' + encodeURIComponent(cleanPayee) +
+    '&am=' + formattedAmount +
+    '&cu=INR' +
+    '&tr=' + encodeURIComponent(ref) +
+    '&tn=' + encodeURIComponent('Order ' + (orderNumber || ref));
+}
+
+/**
  * Idempotent Order Payment Status Updater
  */
 async function processPaymentUpdate(order, payload, app = null) {
@@ -80,13 +115,13 @@ async function processPaymentUpdate(order, payload, app = null) {
   const expectedAmount = order.amountToPay ?? order.total;
 
   if (upperStatus === 'SUCCESS' || upperStatus === 'OK' || upperStatus === 'PAID') {
-    const numAmount = parseFloat(amount);
-    const numPaid = parseFloat(paid ?? amount);
-    const numExpected = parseFloat(expectedAmount);
+    // Use integer paise internally to avoid floating point precision errors
+    const expectedPaise = Math.round(parseFloat(expectedAmount) * 100);
+    const amountPaise = Math.round(parseFloat(amount) * 100);
+    const paidPaise = Math.round(parseFloat(paid ?? amount) * 100);
 
-    // Verify exact amount match (within floating point delta 0.01)
-    const amountMatches = !isNaN(numAmount) && !isNaN(numExpected) && Math.abs(numAmount - numExpected) < 0.05;
-    const paidMatches = !isNaN(numPaid) && numPaid >= (numAmount - 0.05);
+    const amountMatches = !isNaN(amountPaise) && !isNaN(expectedPaise) && amountPaise === expectedPaise;
+    const paidMatches = !isNaN(paidPaise) && paidPaise >= expectedPaise;
 
     if (amountMatches && paidMatches) {
       order.paymentStatus = 'Paid';
@@ -102,17 +137,17 @@ async function processPaymentUpdate(order, payload, app = null) {
       await order.save();
       await handlePostPayment(app, order);
 
-      console.log(`[PAYMENT SUCCESS] Order ${order._id} confirmed for amount ₹${numAmount}`);
+      console.log(`[STAGE N] Order ${order._id} confirmed for amount ₹${parseFloat(expectedAmount).toFixed(2)}`);
       return { success: true, paymentStatus: 'Paid', orderStatus: 'Confirmed' };
     } else {
       // Amount mismatch or WRONG payment amount
       order.paymentStatus = 'WRONG';
       order.notes = (order.notes ? order.notes + '\n' : '') +
-        `[PAYMENT WRONG] Expected: ₹${numExpected}, Server Amount: ₹${numAmount}, Paid: ₹${numPaid}`;
+        `[PAYMENT WRONG] Expected: ₹${parseFloat(expectedAmount).toFixed(2)}, Received: ₹${parseFloat(amount).toFixed(2)}, Paid: ₹${parseFloat(paid ?? amount).toFixed(2)}`;
       order.paymentDetails = payload;
       await order.save();
 
-      console.warn(`[PAYMENT WRONG AMOUNT] Order ${order._id}: expected ₹${numExpected}, got ₹${numAmount}`);
+      console.warn(`[PAYMENT WRONG AMOUNT] Order ${order._id}: expected ₹${parseFloat(expectedAmount).toFixed(2)}, paid ₹${parseFloat(paid ?? amount).toFixed(2)}`);
       return { success: false, paymentStatus: 'WRONG', orderStatus: order.status, message: 'Amount mismatch' };
     }
   } else if (upperStatus === 'WRONG') {
@@ -207,6 +242,8 @@ const createPaymentHandler = async (req, res) => {
     const upiRef = `FW${Date.now()}${Math.floor(Math.random() * 1000)}`;
     const orderNumber = await Order.generateUniqueOrderNumber();
 
+    console.log(`[STAGE A/B] Creating order #${orderNumber} for initial amount ₹${initialTotal}`);
+
     const order = new Order({
       userId: req.userId || req.body.userId,
       orderNumber,
@@ -251,14 +288,16 @@ const createPaymentHandler = async (req, res) => {
     const appKey = process.env.APP_KEY;
     const returnUrl = clientReturnUrl || process.env.RETURN_URL_APP || 'fancyworld://payment-done';
 
-    let payUrl = null;
+    let rawPayUrl = null;
     let finalAmount = initialTotal;
     let paymentServerOrderId = null;
+    let serverPayee = 'SM Fancy';
+    let serverUpiId = dynamicUpiId;
 
     if (paymentServerUrl && appKey && !paymentServerUrl.includes('REPLACE-WITH')) {
       try {
-        console.log(`[Payment Server Request] POST ${paymentServerUrl}/api/create for ref: ${order._id}`);
-        const createRes = await fetch(`${paymentServerUrl}/api/create`, {
+        console.log(`[STAGE C] Creating payment session at ${paymentServerUrl}`);
+        let createRes = await fetch(`${paymentServerUrl}/api/create`, {
           method: 'POST',
           headers: {
             'x-api-key': appKey,
@@ -270,33 +309,66 @@ const createPaymentHandler = async (req, res) => {
             returnUrl,
             upiId: dynamicUpiId,
             vpa: dynamicUpiId,
-            payee: 'Siva Murugan Fancy',
+            payee: 'SM Fancy',
           }),
         });
 
+        // Fallback to /api/order if /api/create returns 404 on this payment server instance
+        if (createRes.status === 404) {
+          console.log(`[Payment Server] /api/create returned 404, attempting /api/order endpoint`);
+          createRes = await fetch(`${paymentServerUrl}/api/order`, {
+            method: 'POST',
+            headers: {
+              'x-api-key': appKey,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              amount: initialTotal,
+              ref: order._id.toString(),
+              returnUrl,
+              upiId: dynamicUpiId,
+              payee: 'SM Fancy',
+            }),
+          });
+        }
+
         if (createRes.ok) {
           const createData = await createRes.json();
-          paymentServerOrderId = createData.id;
+          console.log(`[STAGE D] Payment server response:`, JSON.stringify(createData));
+          paymentServerOrderId = createData.id || createData.orderId;
           finalAmount = parseFloat(createData.amount) || initialTotal;
-          payUrl = createData.payUrl;
+          rawPayUrl = createData.payUrl || createData.upi || createData.qrImage;
+          serverPayee = createData.payee || 'SM Fancy';
+          serverUpiId = createData.upiId || dynamicUpiId;
 
           order.paymentServerOrderId = paymentServerOrderId;
           order.amountToPay = finalAmount;
           order.total = finalAmount;
           await order.save();
-          console.log(`[Payment Server Success] Server Order ID: ${paymentServerOrderId}, Amount: ₹${finalAmount}`);
+          console.log(`[STAGE E] Session initialized. Server Order ID: ${paymentServerOrderId}, Amount: ₹${finalAmount}`);
         } else {
-          console.error('[Payment Server Create Error]', await createRes.text());
+          console.error('[Payment Server Create Error]', createRes.status, await createRes.text());
         }
       } catch (err) {
         console.error('[Payment Server Call Failed]', err.message);
       }
     }
 
-    // Fallback direct UPI Intent URL if payment server URL not configured
-    if (!payUrl) {
-      payUrl = `upi://pay?pa=${dynamicUpiId}&pn=${encodeURIComponent('FANCY WORLD')}&tr=${upiRef}&am=${finalAmount.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Order ' + order.orderNumber)}`;
-    }
+    // Build 100% valid NPCI compliant UPI URI (sanitizing %40 in pa and adding exact parameters)
+    const cleanUpiUri = buildValidUpiUri({
+      upiId: serverUpiId,
+      payee: serverPayee,
+      amount: finalAmount,
+      ref: order._id.toString(),
+      orderNumber: order.orderNumber,
+      rawUri: rawPayUrl,
+    });
+
+    const finalPayUrl = (rawPayUrl && (rawPayUrl.startsWith('http://') || rawPayUrl.startsWith('https://')))
+      ? rawPayUrl
+      : cleanUpiUri;
+
+    console.log(`[STAGE G] Generated clean UPI URI: ${cleanUpiUri}`);
 
     return res.json({
       success: true,
@@ -304,8 +376,9 @@ const createPaymentHandler = async (req, res) => {
       fancyWorldOrderId: order._id.toString(),
       orderNumber: order.orderNumber,
       amount: finalAmount,
-      payUrl: payUrl,
-      upiPayload: payUrl,
+      payUrl: finalPayUrl,
+      upiUri: cleanUpiUri,
+      upiPayload: cleanUpiUri,
       paymentServerOrderId,
       upiReferenceNo: upiRef,
     });
@@ -324,12 +397,14 @@ router.post('/create', verifyToken, createPaymentHandler);
  */
 const callbackHandler = async (req, res) => {
   try {
-    console.log('[CALLBACK RECEIVED] Headers:', JSON.stringify(req.headers));
+    console.log('[STAGE L] Callback received. Headers:', JSON.stringify(req.headers));
 
     if (!verifyHMACSignature(req)) {
       console.warn('[CALLBACK REJECTED] HMAC signature check failed');
       return res.status(400).json({ message: 'Invalid signature' });
     }
+
+    console.log('[STAGE M] HMAC signature verified successfully.');
 
     const payload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
     console.log('[CALLBACK PAYLOAD]', JSON.stringify(payload));
@@ -397,19 +472,26 @@ const statusCheckHandler = async (req, res) => {
 
       if (paymentServerUrl && appKey && !paymentServerUrl.includes('REPLACE-WITH')) {
         try {
-          console.log(`[S2S STATUS CHECK] Querying ${paymentServerUrl}/api/status?id=${pOrderId}`);
-          const statusRes = await fetch(`${paymentServerUrl}/api/status?id=${pOrderId}`, {
+          console.log(`[S2S STATUS CHECK] Querying payment server for ID: ${pOrderId}`);
+          let statusRes = await fetch(`${paymentServerUrl}/api/status?id=${encodeURIComponent(pOrderId)}`, {
             headers: { 'x-api-key': appKey },
           });
 
-          if (statusRes.ok) {
-            const statusData = await statusRes.json();
-            console.log(`[S2S STATUS RESPONSE]`, JSON.stringify(statusData));
-            if (statusData && statusData.status && statusData.status !== 'PENDING') {
-              await processPaymentUpdate(order, statusData, req.app);
+          let statusData = statusRes.ok ? await statusRes.json() : null;
+
+          // If ?id= returned 404 or UNKNOWN, fallback to ?order=
+          if (!statusData || statusData.status === 'UNKNOWN' || statusRes.status === 404) {
+            statusRes = await fetch(`${paymentServerUrl}/api/status?order=${encodeURIComponent(pOrderId)}`, {
+              headers: { 'x-api-key': appKey },
+            });
+            if (statusRes.ok) {
+              statusData = await statusRes.json();
             }
-          } else {
-            console.warn(`[S2S STATUS CHECK FAILED] HTTP ${statusRes.status}`);
+          }
+
+          if (statusData && statusData.status && statusData.status !== 'PENDING' && statusData.status !== 'UNKNOWN') {
+            console.log(`[S2S STATUS RESPONSE]`, JSON.stringify(statusData));
+            await processPaymentUpdate(order, statusData, req.app);
           }
         } catch (err) {
           console.error('[STATUS CHECK S2S ERROR]', err.message);
