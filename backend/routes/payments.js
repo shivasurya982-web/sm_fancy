@@ -332,20 +332,32 @@ const createPaymentHandler = async (req, res) => {
           });
         }
 
+        let serverAmount = undefined;
         if (createRes.ok) {
           const createData = await createRes.json();
           console.log(`[STAGE D] Payment server response:`, JSON.stringify(createData));
           paymentServerOrderId = createData.id || createData.orderId;
-          finalAmount = parseFloat(createData.amount) || initialTotal;
+          serverAmount = parseFloat(createData.amount);
           rawPayUrl = createData.payUrl || createData.upi || createData.qrImage;
           serverPayee = createData.payee || 'SM Fancy';
           serverUpiId = createData.upiId || dynamicUpiId;
+
+          // Validate server amount:
+          // Accept server amount if it's within ₹1.00 of order total (dynamic paise generation)
+          // Reject server amount if it's a fixed BASE_AMOUNT (e.g. 499 overriding a ₹1 order)
+          if (!isNaN(serverAmount) && Math.abs(serverAmount - initialTotal) < 1.00 && serverAmount > 0) {
+            finalAmount = serverAmount;
+            console.log(`[AMOUNT VALIDATION] Accepted dynamic paise server amount: ₹${finalAmount}`);
+          } else {
+            console.warn(`[AMOUNT VALIDATION WARNING] Payment server returned ₹${serverAmount}, which differs from order amount ₹${initialTotal}. Enforcing order amount ₹${initialTotal}.`);
+            finalAmount = initialTotal;
+          }
 
           order.paymentServerOrderId = paymentServerOrderId;
           order.amountToPay = finalAmount;
           order.total = finalAmount;
           await order.save();
-          console.log(`[STAGE E] Session initialized. Server Order ID: ${paymentServerOrderId}, Amount: ₹${finalAmount}`);
+          console.log(`[STAGE E] Session initialized. Server Order ID: ${paymentServerOrderId}, Final Amount: ₹${finalAmount}`);
         } else {
           console.error('[Payment Server Create Error]', createRes.status, await createRes.text());
         }
@@ -354,7 +366,7 @@ const createPaymentHandler = async (req, res) => {
       }
     }
 
-    // Build 100% valid NPCI compliant UPI URI (sanitizing %40 in pa and adding exact parameters)
+    // Build 100% valid NPCI compliant UPI URI (sanitizing %40 in pa and using finalAmount)
     const cleanUpiUri = buildValidUpiUri({
       upiId: serverUpiId,
       payee: serverPayee,
@@ -368,7 +380,18 @@ const createPaymentHandler = async (req, res) => {
       ? rawPayUrl
       : cleanUpiUri;
 
-    console.log(`[STAGE G] Generated clean UPI URI: ${cleanUpiUri}`);
+    console.log(`==================================================`);
+    console.log(`[PAYMENT DIAGNOSTIC LOG]`);
+    console.log(`  ORDER_ID: ${order._id}`);
+    console.log(`  ORDER_NUMBER: ${order.orderNumber}`);
+    console.log(`  ORDER_AMOUNT: ₹${initialTotal.toFixed(2)}`);
+    console.log(`  PAYMENT_REQUEST_AMOUNT: ₹${initialTotal.toFixed(2)}`);
+    console.log(`  PAYMENT_RESPONSE_AMOUNT: ${serverAmount !== undefined ? '₹' + serverAmount.toFixed(2) : 'N/A'}`);
+    console.log(`  FINAL_PAYMENT_AMOUNT: ₹${finalAmount.toFixed(2)}`);
+    console.log(`  PAYMENT_ID: ${paymentServerOrderId || 'N/A'}`);
+    console.log(`  PAYMENT_REFERENCE: ${upiRef}`);
+    console.log(`  CLEAN_UPI_URI: ${cleanUpiUri}`);
+    console.log(`==================================================`);
 
     return res.json({
       success: true,
