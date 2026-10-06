@@ -152,9 +152,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       }
 
     } catch (e) {
+      debugPrint('❌ [FLUTTER PAYMENT INITIATION ERROR]: $e');
       if (mounted) {
         final msg = e.toString().replaceFirst('Exception: ', '').replaceFirst('Error: ', '');
-        showGlassToast(context, "Failed to initiate payment: $msg", isError: true, title: 'PAYMENT ERROR');
+        final displayMsg = msg.startsWith('Failed to initiate payment')
+            ? msg
+            : "Failed to initiate payment: $msg";
+        showGlassToast(context, displayMsg, isError: true, title: 'PAYMENT ERROR');
       }
       if (mounted) setState(() => _isLoading = false);
     }

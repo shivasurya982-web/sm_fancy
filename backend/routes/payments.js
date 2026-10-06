@@ -293,6 +293,9 @@ const createPaymentHandler = async (req, res) => {
     let paymentServerOrderId = null;
     let serverPayee = 'SM Fancy';
     let serverUpiId = dynamicUpiId;
+    let serverAmount = undefined;
+    let paymentServerHttpStatus = null;
+    let paymentServerRawResponse = null;
 
     if (paymentServerUrl && appKey && !paymentServerUrl.includes('REPLACE-WITH')) {
       try {
@@ -313,6 +316,8 @@ const createPaymentHandler = async (req, res) => {
           }),
         });
 
+        paymentServerHttpStatus = createRes.status;
+
         // Fallback to /api/order if /api/create returns 404 on this payment server instance
         if (createRes.status === 404) {
           console.log(`[Payment Server] /api/create returned 404, attempting /api/order endpoint`);
@@ -330,12 +335,13 @@ const createPaymentHandler = async (req, res) => {
               payee: 'SM Fancy',
             }),
           });
+          paymentServerHttpStatus = createRes.status;
         }
 
-        let serverAmount = undefined;
         if (createRes.ok) {
           const createData = await createRes.json();
-          console.log(`[STAGE D] Payment server response:`, JSON.stringify(createData));
+          paymentServerRawResponse = JSON.stringify(createData);
+          console.log(`[STAGE D] Payment server response:`, paymentServerRawResponse);
           paymentServerOrderId = createData.id || createData.orderId;
           serverAmount = parseFloat(createData.amount);
           rawPayUrl = createData.payUrl || createData.upi || createData.qrImage;
@@ -359,10 +365,12 @@ const createPaymentHandler = async (req, res) => {
           await order.save();
           console.log(`[STAGE E] Session initialized. Server Order ID: ${paymentServerOrderId}, Final Amount: ₹${finalAmount}`);
         } else {
-          console.error('[Payment Server Create Error]', createRes.status, await createRes.text());
+          paymentServerRawResponse = await createRes.text();
+          console.error('[Payment Server Create Error]', createRes.status, paymentServerRawResponse);
         }
       } catch (err) {
         console.error('[Payment Server Call Failed]', err.message);
+        paymentServerRawResponse = 'Error: ' + err.message;
       }
     }
 
@@ -386,8 +394,10 @@ const createPaymentHandler = async (req, res) => {
     console.log(`  ORDER_NUMBER: ${order.orderNumber}`);
     console.log(`  ORDER_AMOUNT: ₹${initialTotal.toFixed(2)}`);
     console.log(`  PAYMENT_REQUEST_AMOUNT: ₹${initialTotal.toFixed(2)}`);
-    console.log(`  PAYMENT_RESPONSE_AMOUNT: ${serverAmount !== undefined ? '₹' + serverAmount.toFixed(2) : 'N/A'}`);
+    console.log(`  PAYMENT_RESPONSE_AMOUNT: ${serverAmount !== undefined && !isNaN(serverAmount) ? '₹' + serverAmount.toFixed(2) : 'N/A'}`);
     console.log(`  FINAL_PAYMENT_AMOUNT: ₹${finalAmount.toFixed(2)}`);
+    console.log(`  PAYMENT_SERVER_URL: ${paymentServerUrl || 'N/A'}`);
+    console.log(`  PAYMENT_SERVER_HTTP_STATUS: ${paymentServerHttpStatus || 'N/A'}`);
     console.log(`  PAYMENT_ID: ${paymentServerOrderId || 'N/A'}`);
     console.log(`  PAYMENT_REFERENCE: ${upiRef}`);
     console.log(`  CLEAN_UPI_URI: ${cleanUpiUri}`);
@@ -404,10 +414,22 @@ const createPaymentHandler = async (req, res) => {
       upiPayload: cleanUpiUri,
       paymentServerOrderId,
       upiReferenceNo: upiRef,
+      diagnostics: {
+        orderId: order._id.toString(),
+        orderNumber: order.orderNumber,
+        orderAmount: initialTotal,
+        paymentServerAmount: serverAmount,
+        finalAmount: finalAmount,
+        paymentServerHttpStatus,
+        paymentServerOrderId,
+      }
     });
   } catch (err) {
     console.error('[CREATE PAYMENT ERROR]', err);
-    res.status(500).json({ message: 'Failed to initiate payment', error: err.message });
+    res.status(500).json({
+      message: 'Failed to initiate payment: ' + err.message,
+      error: err.message
+    });
   }
 };
 
