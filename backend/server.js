@@ -159,8 +159,22 @@ app.get('/', (req, res) => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 FancyWorld API online on port ${PORT}`);
+let currentPort = PORT;
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.warn(`⚠️ Port ${currentPort} is already in use. Retrying on port ${Number(currentPort) + 1}...`);
+    currentPort = Number(currentPort) + 1;
+    setTimeout(() => {
+      server.listen(currentPort, '0.0.0.0');
+    }, 500);
+  } else {
+    console.error('Server error:', err);
+  }
+});
+
+server.listen(currentPort, '0.0.0.0', () => {
+  console.log(`🚀 FancyWorld API online on port ${currentPort}`);
   try {
     const { startPendingPaymentRetryJob } = require('./routes/payments');
     startPendingPaymentRetryJob(app);
