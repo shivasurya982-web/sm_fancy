@@ -9,6 +9,7 @@ import '../services/upload_service.dart';
 import '../config/theme.dart';
 import '../widgets/gold_button.dart';
 import '../widgets/glass_toast.dart';
+import '../widgets/image_cropper_dialog.dart';
 import 'login_screen.dart';
 import 'address_screen.dart';
 import 'complaints_screen.dart';
@@ -107,12 +108,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _pickImage() async {
-    final XFile? image =
-        await _picker.pickImage(source: ImageSource.gallery, imageQuality: 50);
-    if (image != null) {
+    final XFile? image = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+      maxWidth: 1200,
+      maxHeight: 1200,
+    );
+    if (image == null || !mounted) return;
+
+    final croppedImage = await ImageCropperDialog.cropImage(context, image);
+    if (croppedImage != null) {
       setState(() => _isLoading = true);
       try {
-        final imageUrl = await UploadService.uploadImage(image);
+        final imageUrl = await UploadService.uploadImage(croppedImage);
         if (imageUrl != null) {
           setState(() => _profileImagePath = imageUrl);
           await _updateProfile();

@@ -387,8 +387,18 @@ class _ChatScreenState extends State<ChatScreen> {
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                   onPressed: isUploading || isLocating ? null : () async {
-                    final img = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 50);
-                    if (img != null) { setState(() => isUploading = true); final url = await UploadService.uploadImage(img); if (url != null) handleSendMessage(image: url); setState(() => isUploading = false); }
+                    final img = await ImagePicker().pickImage(
+                      source: ImageSource.gallery,
+                      imageQuality: 70,
+                      maxWidth: 1024,
+                      maxHeight: 1024,
+                    );
+                    if (img != null) {
+                      setState(() => isUploading = true);
+                      final url = await UploadService.uploadImage(img);
+                      if (url != null) handleSendMessage(image: url);
+                      setState(() => isUploading = false);
+                    }
                   }, 
                   icon: const Icon(Icons.add_photo_alternate_outlined, color: AppTheme.coolGrey, size: 20),
                 ),

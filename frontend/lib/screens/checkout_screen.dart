@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/address_model.dart';
 import '../services/address_service.dart';
 import '../services/cart_service.dart';
@@ -13,7 +15,6 @@ import '../widgets/gold_button.dart';
 import '../widgets/glass_toast.dart';
 import 'order_success_screen.dart';
 import 'payment_result_screen.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({super.key});
@@ -29,11 +30,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final _cityController = TextEditingController();
   final _pinController = TextEditingController();
 
-  String _paymentMethod = 'COD';
+  String _paymentMethod = 'Razorpay';
   bool _isLoading = false;
   String _localCity = 'Tiruchendur';
   double _localFee = 50.0;
   double _standardFee = 100.0;
+
+  Razorpay? _razorpay;
+  String? _currentPendingOrderId;
+  String? _currentRazorpayOrderId;
 
   @override
   void initState() {
@@ -41,6 +46,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     _nameController.text = ApiService.currentUserName;
     _loadSettings();
     _loadSavedAddress();
+    _initRazorpay();
+  }
+
+  void _initRazorpay() {
+    _razorpay = Razorpay();
+    _razorpay!.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handleRazorpaySuccess);
+    _razorpay!.on(Razorpay.EVENT_PAYMENT_ERROR, _handleRazorpayError);
+    _razorpay!.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleRazorpayExternalWallet);
   }
 
   @override
@@ -50,6 +63,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     _streetController.dispose();
     _cityController.dispose();
     _pinController.dispose();
+    _razorpay?.clear();
     super.dispose();
   }
 
@@ -90,10 +104,155 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       return;
     }
     
-    if (_paymentMethod == 'UPI') {
+    if (_paymentMethod == 'Razorpay') {
+        _startRazorpayPayment();
+    } else if (_paymentMethod == 'UPI') {
         _startDynamicUPIPayment();
     } else {
         _confirmOrderCOD();
+    }
+  }
+
+  // --- Razorpay Payment Flow ---
+
+  Future<void> _startRazorpayPayment() async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+
+    try {
+      final shippingAddress = {
+        'fullName': _nameController.text.trim(),
+        'phone': _phoneController.text.trim(),
+        'addressLine1': _streetController.text.trim(),
+        'city': _cityController.text.trim(),
+        'state': 'Tamil Nadu',
+        'pincode': _pinController.text.trim(),
+      };
+
+      final cartItemsMap = CartService.cartItems.map((item) => {
+        'product': item.productId,
+        'name': item.name,
+        'price': item.price,
+        'quantity': item.quantity,
+        'image': item.image,
+      }).toList();
+
+      final res = await PaymentService.createRazorpayOrder(
+        items: cartItemsMap,
+        address: shippingAddress,
+        shipping: _currentShippingFee,
+      );
+
+      final String orderId = res['orderId'].toString();
+      final String razorpayOrderId = res['razorpayOrderId'].toString();
+      final String keyId = res['keyId'].toString();
+      final int amountInPaise = (res['amountInPaise'] as num).toInt();
+
+      _currentPendingOrderId = orderId;
+      _currentRazorpayOrderId = razorpayOrderId;
+
+      var options = {
+        'key': keyId,
+        'amount': amountInPaise,
+        'name': 'SM Fancy',
+        'description': 'Order #${res['orderNumber'] ?? orderId}',
+        'order_id': razorpayOrderId,
+        'timeout': 300,
+        'prefill': {
+          'contact': _phoneController.text.trim(),
+          'email': ApiService.currentUserEmail.isNotEmpty ? ApiService.currentUserEmail : 'customer@smfancy.com',
+          'name': _nameController.text.trim(),
+        },
+        'theme': {
+          'color': '#E5E4E2',
+        }
+      };
+
+      _razorpay?.open(options);
+    } catch (e) {
+      debugPrint('❌ [RAZORPAY INITIATION ERROR]: $e');
+      if (mounted) {
+        final msg = e.toString().replaceFirst('Exception: ', '').replaceFirst('Error: ', '');
+        showGlassToast(context, "Razorpay Failed: $msg", isError: true, title: 'PAYMENT ERROR');
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _handleRazorpaySuccess(PaymentSuccessResponse response) async {
+    try {
+      final String? orderId = _currentPendingOrderId;
+      final String? razorpayOrderId = response.orderId ?? _currentRazorpayOrderId;
+      final String? razorpayPaymentId = response.paymentId;
+      final String? razorpaySignature = response.signature;
+
+      if (orderId == null || razorpayOrderId == null || razorpayPaymentId == null || razorpaySignature == null) {
+        if (mounted) {
+          showGlassToast(context, "Payment response missing signature details.", isError: true, title: 'VERIFICATION ERROR');
+          setState(() => _isLoading = false);
+        }
+        return;
+      }
+
+      final res = await PaymentService.verifyRazorpayPayment(
+        orderId: orderId,
+        razorpayOrderId: razorpayOrderId,
+        razorpayPaymentId: razorpayPaymentId,
+        razorpaySignature: razorpaySignature,
+      );
+
+      if (res['success'] == true && res['paymentStatus'] == 'Paid') {
+        await CartService.clearCart();
+        try {
+          await AddressService.saveAddress(AddressModel(
+            name: _nameController.text.trim(),
+            phone: _phoneController.text.trim(),
+            address: _streetController.text.trim(),
+            city: _cityController.text.trim(),
+            pincode: _pinController.text.trim(),
+          ));
+        } catch (_) {}
+
+        if (mounted) {
+          setState(() => _isLoading = false);
+          showGlassToast(context, "Payment verified successfully!", isError: false, title: 'PAYMENT SUCCESSFUL');
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => PaymentResultScreen(
+                status: 'Paid',
+                orderId: orderId,
+                orderNumber: res['orderNumber'],
+                amount: CartService.cartTotal + _currentShippingFee,
+              ),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          showGlassToast(context, res['message'] ?? "Payment verification failed on server.", isError: true, title: 'VERIFICATION FAILED');
+          setState(() => _isLoading = false);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        showGlassToast(context, "Error verifying payment: $e", isError: true, title: 'VERIFICATION ERROR');
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _handleRazorpayError(PaymentFailureResponse response) {
+    if (mounted) {
+      setState(() => _isLoading = false);
+      final msg = response.message ?? 'Payment cancelled or failed';
+      showGlassToast(context, "Payment Cancelled / Failed: $msg", isError: true, title: 'PAYMENT CANCELLED');
+    }
+  }
+
+  void _handleRazorpayExternalWallet(ExternalWalletResponse response) {
+    if (mounted) {
+      showGlassToast(context, "External Wallet selected: ${response.walletName}", title: 'WALLET SELECTED');
     }
   }
 
@@ -132,10 +291,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       final String? orderNumber = orderData['orderNumber']?.toString();
       final double amount = (orderData['amount'] as num).toDouble();
 
-      // Persist pending order ID for app reload / deep link recovery
       await PaymentService.savePendingOrderId(orderId);
 
-      // Launch clean UPI payment intent in external UPI app
       final targetUri = Uri.parse(upiUri.isNotEmpty ? upiUri : payUrl);
       if (await canLaunchUrl(targetUri)) {
         await launchUrl(targetUri, mode: LaunchMode.externalApplication);
@@ -234,7 +391,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ),
                   const SizedBox(height: 16),
                   
-                  // Button to directly launch UPI App on the same device
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
@@ -425,10 +581,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           const SizedBox(height: 32),
                           _buildSectionHeader('PAYMENT METHOD'),
                           const SizedBox(height: 14),
-                          _buildPaymentOption('COD', Icons.payments_outlined, 'Pay when you receive'),
+                          _buildPaymentOption('Razorpay', Icons.credit_card_rounded, 'Cards, NetBanking, UPI, Wallets'),
                           const SizedBox(height: 12),
                           _buildPaymentOption('UPI', Icons.qr_code_scanner_rounded, 'Secure Dynamic QR Code'),
-                          
+                          const SizedBox(height: 12),
+                          _buildPaymentOption('COD', Icons.payments_outlined, 'Pay when you receive'),
+
                           const SizedBox(height: 32),
                           _buildSectionHeader('ORDER SUMMARY'),
                           const SizedBox(height: 14),
@@ -436,7 +594,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           
                           const SizedBox(height: 40),
                           GoldButton(
-                            label: _paymentMethod == 'UPI' ? 'GENERATE PAYMENT QR' : 'PLACE ORDER', 
+                            label: _paymentMethod == 'Razorpay'
+                                ? 'PAY VIA RAZORPAY'
+                                : _paymentMethod == 'UPI'
+                                    ? 'GENERATE PAYMENT QR'
+                                    : 'PLACE ORDER',
                             onPressed: _isLoading ? null : _handlePlaceOrder,
                             isLoading: _isLoading,
                           ),

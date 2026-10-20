@@ -39,19 +39,25 @@ class ApiService {
     }
 
     // 3. Fast Parallel Probing of Dev/Local Candidates
-    final candidates = [
-      'http://127.0.0.1:5050/api',   // Local Dev / USB Reverse
-      'http://localhost:5050/api',   // Localhost
-      'http://10.0.2.2:5050/api',    // Android Emulator
-      'http://10.1.7.106:5050/api',  // Local Wi-Fi IP
-      _productionBaseUrl,            // Render Cloud Production
-    ];
+    final candidates = kIsWeb
+        ? [
+            'http://127.0.0.1:5050/api',
+            'http://localhost:5050/api',
+            _productionBaseUrl,
+          ]
+        : [
+            'http://127.0.0.1:5050/api',   // Local Dev / USB Reverse
+            'http://localhost:5050/api',   // Localhost
+            'http://10.0.2.2:5050/api',    // Android Emulator
+            'http://10.1.7.106:5050/api',  // Local Wi-Fi IP
+            _productionBaseUrl,            // Render Cloud Production
+          ];
 
     try {
       final String winner = await Future.any(candidates.map((candidate) async {
         final res = await _client
             .get(Uri.parse('$candidate/health'))
-            .timeout(const Duration(milliseconds: 1200));
+            .timeout(const Duration(milliseconds: 600));
         if (res.statusCode == 200) {
           return candidate;
         }

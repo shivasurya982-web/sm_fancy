@@ -25,20 +25,24 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
 });
 
-// Upload buffer to Cloudinary
+// Upload buffer to Cloudinary with speed & compression optimizations
 const uploadToCloudinary = (buffer, folder = 'fancyworld') => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      { folder, resource_type: 'auto' },
+      {
+        folder,
+        resource_type: 'image',
+        quality: 'auto:good',
+        fetch_format: 'auto',
+      },
       (error, result) => {
-if (error) {
-  console.error("CLOUDINARY ERROR");
-  console.error(error);
-  reject(error);
-}        else resolve(result);
+        if (error) {
+          console.error("CLOUDINARY ERROR:", error);
+          reject(error);
+        } else resolve(result);
       }
     );
     stream.end(buffer);

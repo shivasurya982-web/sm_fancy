@@ -22,6 +22,40 @@ class PaymentService {
     return response;
   }
 
+  /// Creates a Razorpay payment order on backend
+  static Future<Map<String, dynamic>> createRazorpayOrder({
+    required List<Map<String, dynamic>> items,
+    required Map<String, dynamic> address,
+    String? couponCode,
+    double shipping = 0,
+    double tax = 0,
+  }) async {
+    final response = await ApiService.post('/payments/razorpay/create-order', {
+      'items': items,
+      'address': address,
+      'couponCode': couponCode,
+      'shipping': shipping,
+      'tax': tax,
+    });
+    return response;
+  }
+
+  /// Verifies Razorpay payment signature on backend
+  static Future<Map<String, dynamic>> verifyRazorpayPayment({
+    required String orderId,
+    required String razorpayOrderId,
+    required String razorpayPaymentId,
+    required String razorpaySignature,
+  }) async {
+    final response = await ApiService.post('/payments/razorpay/verify', {
+      'orderId': orderId,
+      'razorpayOrderId': razorpayOrderId,
+      'razorpayPaymentId': razorpayPaymentId,
+      'razorpaySignature': razorpaySignature,
+    });
+    return response;
+  }
+
   /// Polls backend for actual verified payment status (S2S check).
   static Future<Map<String, dynamic>> checkPaymentStatus(String orderId) async {
     final response = await ApiService.get('/payments/orders/$orderId/payment-status');

@@ -16,6 +16,23 @@ router.get('/', async (req, res) => {
             image: 'https://res.cloudinary.com/demo/image/upload/v1631234567/sample.jpg'
           }
         ],
+        homeBanners: [
+          {
+            title: 'Siva Murugan Fancy',
+            description: 'Tiruchendur',
+            image: 'assets/images/logo1.png'
+          },
+          {
+            title: 'Luxury Collection',
+            description: 'Exclusive Jewellery',
+            image: 'assets/images/banner4.jpg'
+          },
+          {
+            title: 'Special Deals',
+            description: 'Premium Accessories',
+            image: 'assets/images/banner5.jpg'
+          }
+        ],
         upiQrCode: '',
         upiId: '',
         localCity: 'Tiruchendur',

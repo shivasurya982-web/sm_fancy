@@ -263,7 +263,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 OutlinedButton.icon(
                   onPressed: isUploadingImage ? null : () async {
                     final picker = ImagePicker();
-                    final img = await picker.pickImage(source: ImageSource.gallery, imageQuality: 60);
+                    final img = await picker.pickImage(
+                      source: ImageSource.gallery,
+                      imageQuality: 70,
+                      maxWidth: 1024,
+                      maxHeight: 1024,
+                    );
                     if (img != null) {
                       setSheetState(() => isUploadingImage = true);
                       final url = await UploadService.uploadImage(img);

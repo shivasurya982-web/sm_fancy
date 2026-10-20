@@ -37,7 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _loadData(forceRefresh: true);
   }
 
   @override
@@ -53,7 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       await Future.wait([
         _loadProducts(forceRefresh), 
-        _loadSettings(), 
+        _loadSettings(forceRefresh: forceRefresh),
         _loadCategories()
       ]);
       _applyFilterAndSort();
@@ -68,11 +68,37 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {}
   }
 
-  Future<void> _loadSettings() async {
-    final settings = await SettingsService.getSettings();
+  Future<void> _loadSettings({bool forceRefresh = false}) async {
+    final settings = await SettingsService.getSettings(forceRefresh: forceRefresh);
     if (mounted) {
       setState(() {
-        _banners = settings['homeBanners'] ?? settings['onboardingBanners'] ?? [];
+        final homeBanners = settings['homeBanners'];
+        if (homeBanners is List && homeBanners.isNotEmpty) {
+          _banners = List<dynamic>.from(homeBanners);
+        } else {
+          final onboardingBanners = settings['onboardingBanners'];
+          if (onboardingBanners is List && onboardingBanners.isNotEmpty) {
+            _banners = List<dynamic>.from(onboardingBanners);
+          } else {
+            _banners = [
+              {
+                'title': 'Siva Murugan Fancy',
+                'description': 'Tiruchendur',
+                'image': 'assets/images/logo1.png'
+              },
+              {
+                'title': 'Luxury Collection',
+                'description': 'Exclusive Jewellery',
+                'image': 'assets/images/banner4.jpg'
+              },
+              {
+                'title': 'Special Deals',
+                'description': 'Premium Accessories',
+                'image': 'assets/images/banner5.jpg'
+              }
+            ];
+          }
+        }
       });
     }
   }
@@ -504,10 +530,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildBannerImage(String? url) {
     if (url == null || url.isEmpty) return Container(color: Colors.white10);
+    if (url.startsWith('assets/')) {
+      return Container(
+        color: AppTheme.matteBlack,
+        child: Center(
+          child: Image.asset(url, fit: BoxFit.contain),
+        ),
+      );
+    }
     return CachedNetworkImage(
       imageUrl: url,
       fit: BoxFit.cover,
-      errorWidget: (context, url, error) => Container(color: Colors.white10),
+      placeholder: (context, url) => Container(color: Colors.white10),
+      errorWidget: (context, url, error) => Container(
+        color: AppTheme.matteBlack,
+        child: Center(
+          child: Image.asset('assets/images/logo1.png', fit: BoxFit.contain),
+        ),
+      ),
     );
   }
 }

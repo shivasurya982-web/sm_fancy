@@ -70,8 +70,10 @@ router.post('/', verifyToken, requireAdmin, upload.array('images', 5), async (re
     const imagePublicIds = [];
 
     if (req.files && req.files.length > 0) {
-      for (const file of req.files) {
-        const result = await uploadToCloudinary(file.buffer, 'fancyworld/products');
+      const uploadResults = await Promise.all(
+        req.files.map((file) => uploadToCloudinary(file.buffer, 'fancyworld/products'))
+      );
+      for (const result of uploadResults) {
         imageUrls.push(result.secure_url);
         imagePublicIds.push(result.public_id);
       }
@@ -99,13 +101,12 @@ router.put('/:id', verifyToken, requireAdmin, upload.array('images', 5), async (
     if (!product) return res.status(404).json({ message: 'Product not found' });
 
     if (req.files && req.files.length > 0) {
-      const imageUrls = [];
-      const imagePublicIds = [];
-      for (const file of req.files) {
-        const result = await uploadToCloudinary(file.buffer, 'fancyworld/products');
-        imageUrls.push(result.secure_url);
-        imagePublicIds.push(result.public_id);
-      }
+      const uploadResults = await Promise.all(
+        req.files.map((file) => uploadToCloudinary(file.buffer, 'fancyworld/products'))
+      );
+      const imageUrls = uploadResults.map((res) => res.secure_url);
+      const imagePublicIds = uploadResults.map((res) => res.public_id);
+
       product.images = [...product.images, ...imageUrls];
       product.imagePublicIds = [...product.imagePublicIds, ...imagePublicIds];
       if (!product.imageUrl) product.imageUrl = imageUrls[0];

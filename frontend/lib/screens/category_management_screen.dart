@@ -58,11 +58,19 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
                 const SizedBox(height: 20),
                 GestureDetector(
                   onTap: () async {
-                      final img = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 50);
+                      final img = await ImagePicker().pickImage(
+                        source: ImageSource.gallery,
+                        imageQuality: 70,
+                        maxWidth: 1024,
+                        maxHeight: 1024,
+                      );
                       if (img != null) {
                           setDialogState(() => uploading = true);
                           final url = await UploadService.uploadImage(img);
-                          setDialogState(() { imageUrl = url; uploading = false; });
+                          setDialogState(() {
+                            if (url != null && url.isNotEmpty) imageUrl = url;
+                            uploading = false;
+                          });
                       }
                   },
                   child: Container(

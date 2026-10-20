@@ -26,12 +26,14 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _loadSettings() async {
-    final settings = await SettingsService.getSettings();
-    if (mounted) {
-      setState(() {
-        _tagline = settings['splashTagline'] ?? _tagline;
-      });
-    }
+    try {
+      final settings = await SettingsService.getSettings().timeout(const Duration(milliseconds: 2500));
+      if (mounted) {
+        setState(() {
+          _tagline = settings['splashTagline'] ?? _tagline;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _navigateToNext() async {

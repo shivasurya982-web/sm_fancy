@@ -55,7 +55,11 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
 
   Future<void> _pickMultiImage(StateSetter setDialogState) async {
     final picker = ImagePicker();
-    final pickedFiles = await picker.pickMultiImage(imageQuality: 70);
+    final pickedFiles = await picker.pickMultiImage(
+      imageQuality: 70,
+      maxWidth: 1024,
+      maxHeight: 1024,
+    );
     if (pickedFiles.isEmpty) return;
     for (var file in pickedFiles) {
       final bytes = await file.readAsBytes();
@@ -234,19 +238,19 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
       ),
       body: Container(
         decoration: AppTheme.filigreeBackground(),
-        child: Column(
+        child: Stack(
           children: [
-            Padding(
-              padding: EdgeInsets.all(isNarrow ? 16 : 24),
-              child: TextField(
-                decoration: const InputDecoration(hintText: 'Search products...', prefixIcon: Icon(Icons.search_outlined)),
-                onChanged: (v) { _searchQuery = v; _loadProducts(); },
-              ),
-            ),
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator(color: AppTheme.brushedPlatinum))
-                  : _products.isEmpty
+            Column(
+              children: [
+                Padding(
+                  padding: EdgeInsets.all(isNarrow ? 16 : 24),
+                  child: TextField(
+                    decoration: const InputDecoration(hintText: 'Search products...', prefixIcon: Icon(Icons.search_outlined)),
+                    onChanged: (v) { _searchQuery = v; _loadProducts(); },
+                  ),
+                ),
+                Expanded(
+                  child: _products.isEmpty && !_isLoading
                       ? const Center(child: Text('No products found.', style: TextStyle(color: AppTheme.coolGrey, letterSpacing: 1)))
                       : Builder(
                           builder: (context) {
@@ -266,8 +270,17 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
                             );
                           },
                         ),
+                ),
+                const SizedBox(height: 20),
+              ],
             ),
-            const SizedBox(height: 20),
+            if (_isLoading)
+              Container(
+                color: Colors.black.withOpacity(0.35),
+                child: const Center(
+                  child: CircularProgressIndicator(color: AppTheme.brushedPlatinum),
+                ),
+              ),
           ],
         ),
       ),

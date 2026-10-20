@@ -35,7 +35,7 @@ const orderSchema = new mongoose.Schema(
     // Payment
     paymentMethod: {
       type: String,
-      enum: ['COD', 'UPI', 'Card', 'Wallet'],
+      enum: ['COD', 'UPI', 'Razorpay', 'Card', 'Wallet'],
       default: 'COD',
     },
     paymentStatus: {
@@ -46,6 +46,9 @@ const orderSchema = new mongoose.Schema(
     upiTransactionId: { type: String },
     upiReferenceNo: { type: String },
     paymentServerOrderId: { type: String },
+    razorpayOrderId: { type: String },
+    razorpayPaymentId: { type: String },
+    razorpaySignature: { type: String },
     amountToPay: { type: Number },
     paymentVerifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     paymentDetails: { type: Object },

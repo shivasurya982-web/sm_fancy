@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../services/user_service.dart';
 import '../services/upload_service.dart';
 import '../config/theme.dart';
+import '../widgets/image_cropper_dialog.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -37,11 +38,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _pickImage() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 60);
-    if (image != null) {
+    final XFile? image = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+      maxWidth: 1200,
+      maxHeight: 1200,
+    );
+    if (image == null || !mounted) return;
+
+    final croppedImage = await ImageCropperDialog.cropImage(context, image);
+    if (croppedImage != null) {
       setState(() => _isLoading = true);
       try {
-        final String? uploadedUrl = await UploadService.uploadImage(image);
+        final String? uploadedUrl = await UploadService.uploadImage(croppedImage);
         if (uploadedUrl != null) {
           setState(() => _profileImagePath = uploadedUrl);
           if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("IMAGE UPLOADED")));

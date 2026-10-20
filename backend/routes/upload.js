@@ -1,17 +1,9 @@
 console.log('UPLOAD ROUTE LOADED');
 const express = require('express');
-const multer = require('multer');
-const streamifier = require('streamifier');
-const cloudinary = require('../config/cloudinary');
-const { verifyToken, requireAdmin } = require('../middleware/auth');
+const { upload, uploadToCloudinary } = require('../middleware/upload');
+const { verifyToken } = require('../middleware/auth');
 
 const router = express.Router();
-
-const storage = multer.memoryStorage();
-
-const upload = multer({
-  storage,
-});
 
 router.post(
   '/',
@@ -25,32 +17,17 @@ router.post(
         });
       }
 
-      const result = await new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          {
-            folder: 'fancyworld/products',
-          },
-          (error, result) => {
-            if (error) reject(error);
-            else resolve(result);
-          }
-        );
-
-        streamifier.createReadStream(req.file.buffer).pipe(stream);
-      });
+      const result = await uploadToCloudinary(req.file.buffer, 'fancyworld/products');
 
       res.json({
         imageUrl: result.secure_url,
       });
-    }catch (err) {
-  console.error("UPLOAD ERROR:");
-  console.error(err);
-
-  res.status(500).json({
-    message: err.message,
-    stack: err.stack,
-  });
-}
+    } catch (err) {
+      console.error("UPLOAD ERROR:", err);
+      res.status(500).json({
+        message: err.message,
+      });
+    }
   }
 );
 
