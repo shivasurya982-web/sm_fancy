@@ -134,49 +134,60 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
       ),
       body: Container(
         decoration: AppTheme.filigreeBackground(),
-        child: _isLoading 
-          ? const Center(child: CircularProgressIndicator(color: AppTheme.brushedPlatinum))
-          : ListView.separated(
-              padding: EdgeInsets.fromLTRB(isNarrow ? 16 : 24, 20, isNarrow ? 16 : 24, 100),
-              itemCount: _categories.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 16),
-              itemBuilder: (ctx, idx) {
-                final cat = _categories[idx];
-                return Container(
-                  decoration: AppTheme.premiumCard(radius: 24),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.all(12),
-                      leading: Container(
-                          width: 52, height: 52,
-                          decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              color: Colors.white.withValues(alpha: 0.05),
-                              border: Border.all(color: AppTheme.glassBorder, width: 0.8)
+        child: Stack(
+          children: [
+            _categories.isEmpty && !_isLoading
+                ? const Center(child: Text('No categories found.', style: TextStyle(color: AppTheme.coolGrey, letterSpacing: 1)))
+                : ListView.separated(
+                    padding: EdgeInsets.fromLTRB(isNarrow ? 16 : 24, 20, isNarrow ? 16 : 24, 100),
+                    itemCount: _categories.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 16),
+                    itemBuilder: (ctx, idx) {
+                      final cat = _categories[idx];
+                      return Container(
+                        decoration: AppTheme.premiumCard(radius: 24),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.all(12),
+                            leading: Container(
+                              width: 52,
+                              height: 52,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                color: Colors.white.withValues(alpha: 0.05),
+                                border: Border.all(color: AppTheme.glassBorder, width: 0.8),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: cat['image'] != null && cat['image'].toString().startsWith('http')
+                                    ? Image.network(cat['image'], fit: BoxFit.cover)
+                                    : const Icon(Icons.category_rounded, color: Colors.white10, size: 24),
+                              ),
+                            ),
+                            title: Text(cat['name'].toString().toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 1, color: AppTheme.polishedSilver)),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(icon: const Icon(Icons.edit_outlined, color: AppTheme.brushedPlatinum, size: 20), onPressed: () => _showAddEditDialog(category: cat)),
+                                IconButton(icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 20), onPressed: () async {
+                                  await CategoryService.deleteCategory(cat['_id']);
+                                  _load();
+                                }),
+                              ],
+                            ),
                           ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: cat['image'] != null && cat['image'].toString().startsWith('http')
-                              ? Image.network(cat['image'], fit: BoxFit.cover)
-                              : const Icon(Icons.category_rounded, color: Colors.white10, size: 24),
-                          ),
-                      ),
-                      title: Text(cat['name'].toString().toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 1, color: AppTheme.polishedSilver)),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(icon: const Icon(Icons.edit_outlined, color: AppTheme.brushedPlatinum, size: 20), onPressed: () => _showAddEditDialog(category: cat)),
-                          IconButton(icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 20), onPressed: () async {
-                              await CategoryService.deleteCategory(cat['_id']); _load();
-                          }),
-                        ],
-                      ),
-                    ),
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
+            if (_isLoading)
+              Container(
+                color: Colors.black.withOpacity(0.35),
+                child: const Center(child: CircularProgressIndicator(color: AppTheme.brushedPlatinum)),
+              ),
+          ],
+        ),
       ),
     );
   }

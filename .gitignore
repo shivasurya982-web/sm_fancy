@@ -27,6 +27,7 @@ frontend/pubspec.lock
 # Android specific
 frontend/android/.gradle/
 frontend/android/local.properties
+frontend/android/build/
 frontend/android/app/debug/
 frontend/android/app/profile/
 frontend/android/app/release/

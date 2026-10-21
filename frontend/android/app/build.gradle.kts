@@ -7,7 +7,7 @@ plugins {
 android {
     namespace = "com.example.frontend"
     compileSdk = 36
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "com.example.frontend"

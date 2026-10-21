@@ -2,12 +2,14 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
     }
 }
 
 val newBuildDir: Directory =
     rootProject.layout.buildDirectory
-        .dir("../../build")
+        .dir("../build")
         .get()
 
 rootProject.layout.buildDirectory.value(newBuildDir)
