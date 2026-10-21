@@ -626,12 +626,12 @@ function startPendingPaymentRetryJob(app = null) {
  */
 router.get('/config', (req, res) => {
   res.json({
-    keyId: process.env.RAZORPAY_KEY_ID || '',
+    keyId: (process.env.RAZORPAY_KEY_ID || '').trim(),
   });
 });
 router.get('/razorpay/config', (req, res) => {
   res.json({
-    keyId: process.env.RAZORPAY_KEY_ID || '',
+    keyId: (process.env.RAZORPAY_KEY_ID || '').trim(),
   });
 });
 
@@ -708,8 +708,8 @@ router.post('/razorpay/create-order', verifyToken, async (req, res) => {
     }
 
     // 3. Initialize Razorpay SDK Order
-    const keyId = process.env.RAZORPAY_KEY_ID;
-    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    const keyId = (process.env.RAZORPAY_KEY_ID || '').trim();
+    const keySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
 
     if (!keyId || !keySecret) {
       return res.status(500).json({
@@ -751,8 +751,9 @@ router.post('/razorpay/create-order', verifyToken, async (req, res) => {
     });
   } catch (err) {
     console.error('[RAZORPAY CREATE ORDER ERROR]', err);
+    const errorMsg = err.error?.description || err.message || (typeof err === 'object' ? JSON.stringify(err) : String(err));
     return res.status(500).json({
-      message: 'Failed to create Razorpay order: ' + err.message,
+      message: 'Failed to create Razorpay order: ' + errorMsg,
     });
   }
 });
@@ -793,7 +794,7 @@ router.post('/razorpay/verify', verifyToken, async (req, res) => {
     }
 
     // Verify HMAC-SHA256 signature
-    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    const keySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
     if (!keySecret) {
       return res.status(500).json({ message: 'RAZORPAY_KEY_SECRET missing on backend server' });
     }
