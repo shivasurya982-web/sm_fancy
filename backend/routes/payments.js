@@ -751,7 +751,10 @@ router.post('/razorpay/create-order', verifyToken, async (req, res) => {
     });
   } catch (err) {
     console.error('[RAZORPAY CREATE ORDER ERROR]', err);
-    const errorMsg = err.error?.description || err.message || (typeof err === 'object' ? JSON.stringify(err) : String(err));
+    let errorMsg = err.error?.description || err.message || (typeof err === 'object' ? JSON.stringify(err) : String(err));
+    if (err.statusCode === 401 || errorMsg.includes('Authentication failed')) {
+      errorMsg = 'Authentication failed. Please verify your RAZORPAY_KEY_ID & RAZORPAY_KEY_SECRET in backend .env against your active keys on Razorpay Dashboard.';
+    }
     return res.status(500).json({
       message: 'Failed to create Razorpay order: ' + errorMsg,
     });

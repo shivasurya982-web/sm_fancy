@@ -6,6 +6,7 @@ class NotificationService {
   static final ValueNotifier<List<dynamic>> notificationsNotifier = ValueNotifier([]);
 
   static Future<Map<String, dynamic>> fetchMyNotifications() async {
+    if (!ApiService.isLoggedIn) return {};
     final response = await ApiService.get('/notifications');
     if (response != null) {
       notificationsNotifier.value = response['notifications'] ?? [];

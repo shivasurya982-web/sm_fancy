@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -50,10 +51,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   void _initRazorpay() {
-    _razorpay = Razorpay();
-    _razorpay!.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handleRazorpaySuccess);
-    _razorpay!.on(Razorpay.EVENT_PAYMENT_ERROR, _handleRazorpayError);
-    _razorpay!.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleRazorpayExternalWallet);
+    if (!kIsWeb) {
+      _razorpay = Razorpay();
+      _razorpay!.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handleRazorpaySuccess);
+      _razorpay!.on(Razorpay.EVENT_PAYMENT_ERROR, _handleRazorpayError);
+      _razorpay!.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleRazorpayExternalWallet);
+    }
   }
 
   @override
@@ -63,7 +66,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     _streetController.dispose();
     _cityController.dispose();
     _pinController.dispose();
-    _razorpay?.clear();
+    if (!kIsWeb) {
+      _razorpay?.clear();
+    }
     super.dispose();
   }
 
@@ -167,6 +172,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           'color': '#E5E4E2',
         }
       };
+
+      if (kIsWeb) {
+        showGlassToast(
+          context,
+          "Razorpay SDK requires Android/iOS device build. On Web browser, please use UPI or COD.",
+          isError: false,
+          title: 'WEB ENVIRONMENT NOTICE',
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
 
       _razorpay?.open(options);
     } catch (e) {

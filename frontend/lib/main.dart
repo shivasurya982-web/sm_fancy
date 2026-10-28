@@ -15,6 +15,22 @@ import 'screens/splash_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Suppress Flutter Web Engine assertions (e.g. viewInsets calculation glitches during devtools resize / keyboard dismiss)
+  FlutterError.onError = (FlutterErrorDetails details) {
+    final msg = details.exceptionAsString();
+    if (msg.contains('viewInsets cannot be negative') || msg.contains('texImage2D')) {
+      return;
+    }
+    FlutterError.presentError(details);
+  };
+  PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+    final msg = error.toString();
+    if (msg.contains('viewInsets cannot be negative') || msg.contains('texImage2D')) {
+      return true; // Handled
+    }
+    return false;
+  };
+
   // Handle font loading issues on some networks/browsers gracefully
   if (kIsWeb) {
     debugPrint('Running in Web mode - skipping native-only services');

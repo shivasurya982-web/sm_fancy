@@ -23,6 +23,43 @@
 
   <!-- Razorpay Checkout JS for Flutter Web -->
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script>
+    function openRazorpayWebCheckout(keyId, amount, razorpayOrderId, name, email, phone, orderNumber, successCbName, errorCbName) {
+      if (typeof Razorpay === 'undefined') {
+        if (window[errorCbName]) window[errorCbName]('Razorpay Web JS SDK not loaded');
+        return;
+      }
+      var options = {
+        key: keyId,
+        amount: amount,
+        currency: 'INR',
+        name: 'SM Fancy',
+        description: 'Order #' + (orderNumber || ''),
+        order_id: razorpayOrderId,
+        prefill: {
+          name: name,
+          email: email,
+          contact: phone
+        },
+        theme: { color: '#E5E4E2' },
+        handler: function (response) {
+          if (window[successCbName]) {
+            window[successCbName](response.razorpay_order_id, response.razorpay_payment_id, response.razorpay_signature);
+          }
+        },
+        modal: {
+          ondismiss: function() {
+            if (window[errorCbName]) window[errorCbName]('Payment dismissed by user');
+          }
+        }
+      };
+      var rzp = new Razorpay(options);
+      rzp.on('payment.failed', function (resp) {
+        if (window[errorCbName]) window[errorCbName](resp.error ? resp.error.description : 'Payment failed');
+      });
+      rzp.open();
+    }
+  </script>
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
