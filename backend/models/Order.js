@@ -96,20 +96,18 @@ const orderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Helper function for guaranteed unique order number
+// Helper function for guaranteed unique OTP-style verification order number (e.g. FW-849201)
 async function generateUniqueOrderNumber() {
-  const now = new Date();
-  const dateStr = now.toISOString().slice(2, 10).replace(/-/g, '');
-
-  for (let attempt = 0; attempt < 10; attempt++) {
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    const candidate = `FW${dateStr}${randomSuffix}`;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const otpCode = Math.floor(100000 + Math.random() * 900000);
+    const candidate = `FW-${otpCode}`;
     const exists = await mongoose.model('Order').exists({ orderNumber: candidate });
     if (!exists) {
       return candidate;
     }
   }
-  return `FW${Date.now()}`;
+  const fallbackOtp = Date.now().toString().slice(-6);
+  return `FW-${fallbackOtp}`;
 }
 
 // Auto-generate order number reliably and uniquely before saving
@@ -118,7 +116,8 @@ orderSchema.pre('save', async function (next) {
     try {
       this.orderNumber = await generateUniqueOrderNumber();
     } catch (e) {
-      this.orderNumber = `FW${Date.now()}`;
+      const fallbackOtp = Date.now().toString().slice(-6);
+      this.orderNumber = `FW-${fallbackOtp}`;
     }
   }
   next();

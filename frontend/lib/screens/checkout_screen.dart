@@ -218,6 +218,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       );
 
       if (res['success'] == true && res['paymentStatus'] == 'Paid') {
+        final double paidTotal = (res['total'] != null)
+            ? (res['total'] as num).toDouble()
+            : (res['amount'] != null)
+                ? (res['amount'] as num).toDouble()
+                : (CartService.cartTotal + _currentShippingFee);
+
         await CartService.clearCart();
         try {
           await AddressService.saveAddress(AddressModel(
@@ -239,7 +245,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 status: 'Paid',
                 orderId: orderId,
                 orderNumber: res['orderNumber'],
-                amount: CartService.cartTotal + _currentShippingFee,
+                amount: paidTotal,
               ),
             ),
           );

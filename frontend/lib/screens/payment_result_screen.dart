@@ -138,17 +138,20 @@ class PaymentResultScreen extends StatelessWidget {
   }
 
   Widget _buildDetailsCard() {
+    final double displayAmount = amount ?? 0;
+    final String amountStr = (displayAmount % 1 == 0)
+        ? displayAmount.toStringAsFixed(0)
+        : displayAmount.toStringAsFixed(2);
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: AppTheme.premiumCard(),
       child: Column(
         children: [
-          _buildRow('ORDER ID', orderNumber ?? orderId),
-          if (amount != null && amount! > 0) ...[
-            const Divider(color: AppTheme.glassBorder, height: 20),
-            _buildRow('AMOUNT', '₹${amount!.toStringAsFixed(2)}'),
-          ],
+          _buildRow('VERIFICATION CODE / ORDER ID', orderNumber ?? orderId),
+          const Divider(color: AppTheme.glassBorder, height: 20),
+          _buildRow('TOTAL AMOUNT PAID', '₹$amountStr', color: AppTheme.amberGold),
           const Divider(color: AppTheme.glassBorder, height: 20),
           _buildRow('STATUS', isSuccess ? 'CONFIRMED' : isWrongAmount ? 'NEEDS REVIEW' : 'CANCELLED',
               color: isSuccess ? AppTheme.success : isWrongAmount ? Colors.amber : AppTheme.error),

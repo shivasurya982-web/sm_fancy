@@ -91,7 +91,7 @@ router.post('/', verifyToken, async (req, res) => {
       await order.save();
     } catch (saveErr) {
       if (saveErr.code === 11000) {
-        order.orderNumber = `FW${Date.now()}`;
+        order.orderNumber = `FW-${Date.now().toString().slice(-6)}`;
         await order.save();
       } else {
         throw saveErr;
